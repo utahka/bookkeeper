@@ -1,32 +1,34 @@
 """
 CSV TransactionRepository 実装
 
-CSVファイルで仕訳を永続化
+Polarsを使って効率的にCSVで仕訳を永続化
 """
 
-import csv
 from pathlib import Path
 from typing import List
 from datetime import date
 from decimal import Decimal
+
+import polars as pl
 
 from bookkeeper.domain.models.transaction import Transaction
 from bookkeeper.domain.repositories.transaction_repository import TransactionRepository
 
 
 class CsvTransactionRepository(TransactionRepository):
-    """CSV形式の仕訳リポジトリ"""
+    """CSV形式の仕訳リポジトリ（Polarsベース）"""
 
-    CSV_HEADERS = [
-        "date",
-        "debit_account",
-        "debit_amount",
-        "credit_account",
-        "credit_amount",
-        "description",
-        "note",
-        "evidence_path",
-    ]
+    # スキーマ定義
+    SCHEMA = {
+        "date": pl.Date,
+        "debit_account": pl.String,
+        "debit_amount": pl.String,  # Decimalとして扱うため文字列で保存
+        "credit_account": pl.String,
+        "credit_amount": pl.String,  # Decimalとして扱うため文字列で保存
+        "description": pl.String,
+        "note": pl.String,
+        "evidence_path": pl.String,
+    }
 
     def __init__(self, csv_path: Path):
         self.csv_path = csv_path
@@ -36,59 +38,82 @@ class CsvTransactionRepository(TransactionRepository):
         """CSVファイルが存在しない場合はヘッダー付きで作成"""
         if not self.csv_path.exists():
             self.csv_path.parent.mkdir(parents=True, exist_ok=True)
-            with open(self.csv_path, "w", newline="", encoding="utf-8") as f:
-                writer = csv.DictWriter(f, fieldnames=self.CSV_HEADERS)
-                writer.writeheader()
+            # 空のDataFrameを作成してヘッダーを書き込む
+            df = pl.DataFrame(schema=self.SCHEMA)
+            df.write_csv(self.csv_path)
 
     def add(self, transaction: Transaction) -> None:
         """仕訳を追加"""
-        with open(self.csv_path, "a", newline="", encoding="utf-8") as f:
-            writer = csv.DictWriter(f, fieldnames=self.CSV_HEADERS)
-            writer.writerow(
-                {
-                    "date": transaction.date.isoformat(),
-                    "debit_account": transaction.debit_account,
-                    "debit_amount": str(transaction.debit_amount),
-                    "credit_account": transaction.credit_account,
-                    "credit_amount": str(transaction.credit_amount),
-                    "description": transaction.description,
-                    "note": transaction.note,
-                    "evidence_path": transaction.evidence_path,
-                }
-            )
+        # 新しい行をDataFrameとして作成
+        new_row = pl.DataFrame(
+            {
+                "date": [transaction.date],
+                "debit_account": [transaction.debit_account],
+                "debit_amount": [str(transaction.debit_amount)],
+                "credit_account": [transaction.credit_account],
+                "credit_amount": [str(transaction.credit_amount)],
+                "description": [transaction.description],
+                "note": [transaction.note],
+                "evidence_path": [transaction.evidence_path],
+            }
+        )
+
+        # 既存のデータを読み込んで追加
+        if self.csv_path.stat().st_size > 0:
+            try:
+                df = pl.read_csv(self.csv_path, schema_overrides=self.SCHEMA)
+                df = pl.concat([df, new_row])
+            except pl.exceptions.NoDataError:
+                # ヘッダーのみの場合
+                df = new_row
+        else:
+            df = new_row
+
+        # 書き込み
+        df.write_csv(self.csv_path)
 
     def find_all(self) -> List[Transaction]:
         """全ての仕訳を取得"""
-        transactions = []
+        if not self.csv_path.exists() or self.csv_path.stat().st_size == 0:
+            return []
 
-        if not self.csv_path.exists():
-            return transactions
-
-        with open(self.csv_path, "r", encoding="utf-8") as f:
-            reader = csv.DictReader(f)
-            for row in reader:
-                transactions.append(self._row_to_transaction(row))
-
-        return transactions
+        try:
+            df = pl.read_csv(self.csv_path, schema_overrides=self.SCHEMA)
+            return self._df_to_transactions(df)
+        except pl.exceptions.NoDataError:
+            # ヘッダーのみの場合
+            return []
 
     def find_by_account(self, account_name: str) -> List[Transaction]:
         """指定した勘定科目を含む仕訳を取得"""
-        all_transactions = self.find_all()
-        return [
-            txn
-            for txn in all_transactions
-            if txn.debit_account == account_name or txn.credit_account == account_name
-        ]
+        if not self.csv_path.exists() or self.csv_path.stat().st_size == 0:
+            return []
 
-    def _row_to_transaction(self, row: dict) -> Transaction:
-        """CSV行をTransactionエンティティに変換"""
-        return Transaction(
-            date=date.fromisoformat(row["date"]),
-            debit_account=row["debit_account"],
-            debit_amount=Decimal(row["debit_amount"]),
-            credit_account=row["credit_account"],
-            credit_amount=Decimal(row["credit_amount"]),
-            description=row["description"],
-            note=row.get("note", ""),
-            evidence_path=row.get("evidence_path", ""),
-        )
+        try:
+            df = pl.read_csv(self.csv_path, schema_overrides=self.SCHEMA)
+            # Polarsの効率的なフィルタリング
+            filtered = df.filter(
+                (pl.col("debit_account") == account_name)
+                | (pl.col("credit_account") == account_name)
+            )
+            return self._df_to_transactions(filtered)
+        except pl.exceptions.NoDataError:
+            return []
+
+    def _df_to_transactions(self, df: pl.DataFrame) -> List[Transaction]:
+        """DataFrameをTransactionのリストに変換"""
+        transactions = []
+        for row in df.iter_rows(named=True):
+            transactions.append(
+                Transaction(
+                    date=row["date"],
+                    debit_account=row["debit_account"],
+                    debit_amount=Decimal(row["debit_amount"]),
+                    credit_account=row["credit_account"],
+                    credit_amount=Decimal(row["credit_amount"]),
+                    description=row["description"],
+                    note=row.get("note", "") or "",
+                    evidence_path=row.get("evidence_path", "") or "",
+                )
+            )
+        return transactions
