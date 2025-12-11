@@ -6,7 +6,6 @@ Polarsを使って効率的にCSVで仕訳を永続化
 
 from pathlib import Path
 from typing import List
-from datetime import date
 from decimal import Decimal
 
 import polars as pl
