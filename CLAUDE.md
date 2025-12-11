@@ -17,6 +17,7 @@
 - **言語**: Python 3.13+
 - **パッケージマネージャ**: uv
 - **CLIフレームワーク**: typer
+- **データ処理**: polars（CSV操作）
 - **アーキテクチャ**: クリーンアーキテクチャ
 
 ## アプリケーションの実行方法
@@ -79,13 +80,22 @@ infrastructure/  → 外部関心事（永続化、設定）
    - 各ユースケースは単一のビジネス操作（AddTransaction, ListJournal, ViewLedger）
 
 5. **インフラストラクチャ層は実装**:
-   - `infrastructure/persistence/csv_transaction_repository.py`: TransactionRepository の具体実装
+   - `infrastructure/persistence/csv_transaction_repository.py`: TransactionRepository の具体実装（Polarsベース）
    - `infrastructure/config/settings.py`: 設定管理
 
 6. **プレゼンテーション層はtyperを使用**:
    - `presentation/cli/commands.py` でtyperを使ってCLIを定義
    - `@app.command()` デコレータで各コマンドを宣言的に定義
    - DIモジュールからユースケースを取得して実行
+
+### リポジトリの命名規則
+
+- リポジトリクラス名は**データソースの種類**で命名する
+  - ✅ `CsvTransactionRepository` - CSVをデータソースとして使用
+  - ✅ `PostgresTransactionRepository` - PostgreSQLをデータソースとして使用
+  - ❌ `PolarsTransactionRepository` - Polarsはツールであってデータソースではない
+- 実装の内部でどのツール（polars、pandas、標準ライブラリなど）を使うかは実装の詳細
+- DI層で実装を切り替えることで、上位層に影響を与えずにツールを変更可能
 
 ### 複式簿記の概念
 
@@ -102,6 +112,32 @@ infrastructure/  → 外部関心事（永続化、設定）
 - CSVファイルが存在しない場合、ヘッダー付きで自動作成される
 - データディレクトリのパス: `PROJECT_ROOT/data/`
 - **重要**: `data/transactions.csv` は `.gitignore` で除外されている（実際の取引データを保護するため）
+
+### CSV操作にPolarsを使用
+
+現在の実装では、CSV操作にPolarsライブラリを使用しています。
+
+**Polarsを使用する理由:**
+- 型安全性: スキーマ定義で型を強制
+- 効率的なクエリ: フィルタリングや集計が高速
+- 拡張性: 将来的な分析機能の追加が容易
+- パフォーマンス: Rustベースで高速
+
+**実装のポイント:**
+```python
+# スキーマ定義
+SCHEMA = {
+    "date": pl.Date,
+    "debit_amount": pl.String,  # Decimalとして扱うため文字列で保存
+    # ...
+}
+
+# 効率的なフィルタリング
+df.filter(
+    (pl.col("debit_account") == account_name) |
+    (pl.col("credit_account") == account_name)
+)
+```
 
 ## 新機能の追加
 
@@ -127,9 +163,18 @@ infrastructure/  → 外部関心事（永続化、設定）
 
 ### 永続化層の変更
 
-1. `infrastructure/persistence/` に新しいリポジトリ実装を作成
-2. `domain/repositories/` のインターフェースを実装
+#### 実装ツールの変更（例: 標準ライブラリ → Polars）
+
+1. `infrastructure/persistence/csv_transaction_repository.py` の実装を書き換え
+2. クラス名は変更しない（`CsvTransactionRepository`のまま）
+3. DI層や上位層には一切変更不要
+
+#### データソースの変更（例: CSV → PostgreSQL）
+
+1. `infrastructure/persistence/` に新しいリポジトリ実装を作成（例: `postgres_transaction_repository.py`）
+2. `domain/repositories/transaction_repository.py` のインターフェースを実装
 3. `common/di/di.py` の `_get_transaction_repository()` を更新して新しい実装を返す
+4. プレゼンテーション層・アプリケーション層には一切変更不要
 
 ### 依存関係の追加
 
@@ -143,6 +188,7 @@ infrastructure/  → 外部関心事（永続化、設定）
 - ドメインロジックを変更する際は、不変条件が保護されていることを確認すること
 - リポジトリパターンにより永続化メカニズムの簡単な切り替えが可能（現在はCSV、SQLite/PostgreSQLにも変更可能）
 - プレゼンテーション層は決してインフラストラクチャ層に直接依存しない - 必ずDIモジュール経由で依存関係を解決する
+- リポジトリクラス名はデータソースで命名し、実装ツールは内部の詳細として扱う
 
 ## 開発のベストプラクティス
 
@@ -159,3 +205,8 @@ infrastructure/  → 外部関心事（永続化、設定）
 - プレゼンテーション層は常にDIモジュール経由でユースケースを取得
 - インフラストラクチャの実装詳細をDI層に隠蔽
 - テスタビリティを高めるため、具体的な実装への依存を避ける
+
+### リポジトリ実装の変更
+- 実装ツールを変更する場合は既存のクラスを書き換える（クラス名は変更しない）
+- データソースを変更する場合は新しいクラスを作成してDI層で切り替える
+- どちらの場合も上位層（プレゼンテーション、アプリケーション）に変更は不要
