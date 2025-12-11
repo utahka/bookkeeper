@@ -4,8 +4,8 @@ AddTransaction ユースケース
 仕訳を追加する
 """
 
-from bookkeeper.domain.models.transaction import Transaction
-from bookkeeper.domain.repositories.transaction_repository import TransactionRepository
+from bookkeeper.domain.entity.transaction import Transaction
+from bookkeeper.domain.repository.transaction_repository import TransactionRepository
 
 
 class AddTransactionUseCase:

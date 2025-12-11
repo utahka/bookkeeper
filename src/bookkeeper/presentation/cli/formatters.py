@@ -7,8 +7,8 @@ CLI フォーマッター
 from typing import List
 from decimal import Decimal
 
-from bookkeeper.domain.models.transaction import Transaction
-from bookkeeper.domain.services.ledger_service import LedgerEntry
+from bookkeeper.domain.entity.transaction import Transaction
+from bookkeeper.domain.service.ledger_service import LedgerEntry
 
 
 def format_journal(transactions: List[Transaction]) -> str:

@@ -7,7 +7,7 @@ TransactionRepository インターフェース
 from abc import ABC, abstractmethod
 from typing import List
 
-from bookkeeper.domain.models.transaction import Transaction
+from bookkeeper.domain.entity.transaction import Transaction
 
 
 class TransactionRepository(ABC):

@@ -5,6 +5,7 @@ description = "Add your description here"
 requires-python = ">=3.13"
 dependencies = [
     "polars>=1.36.1",
+    "pydantic>=2.12.5",
     "typer>=0.20.0",
 ]
 

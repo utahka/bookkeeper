@@ -4,18 +4,18 @@ CLI コマンド
 ユーザーインターフェース
 """
 
-import sys
 from datetime import date, datetime
 from decimal import Decimal, InvalidOperation
 
 import typer
+from pydantic import ValidationError
 
 from bookkeeper.common.di import (
     init_add_transaction_usecase,
     init_list_journal_usecase,
     init_view_ledger_usecase,
 )
-from bookkeeper.domain.models.transaction import Transaction
+from bookkeeper.domain.entity.transaction import Transaction
 from bookkeeper.presentation.cli.formatters import format_journal, format_ledger
 
 
@@ -83,7 +83,7 @@ def add():
         print()
         print("✓ 仕訳を追加しました")
 
-    except (ValueError, InvalidOperation) as e:
+    except (ValueError, InvalidOperation, ValidationError) as e:
         print(f"エラー: {e}")
         raise typer.Exit(code=1)
     except KeyboardInterrupt:

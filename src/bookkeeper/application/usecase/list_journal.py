@@ -6,8 +6,8 @@ ListJournal ユースケース
 
 from typing import List
 
-from bookkeeper.domain.models.transaction import Transaction
-from bookkeeper.domain.repositories.transaction_repository import TransactionRepository
+from bookkeeper.domain.entity.transaction import Transaction
+from bookkeeper.domain.repository.transaction_repository import TransactionRepository
 
 
 class ListJournalUseCase:
