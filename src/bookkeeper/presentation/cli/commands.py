@@ -7,18 +7,15 @@ CLI コマンド
 import sys
 from datetime import date, datetime
 from decimal import Decimal, InvalidOperation
-from typing import Optional
 
 import typer
 
-from bookkeeper.domain.models.transaction import Transaction
-from bookkeeper.application.use_cases.add_transaction import AddTransactionUseCase
-from bookkeeper.application.use_cases.list_journal import ListJournalUseCase
-from bookkeeper.application.use_cases.view_ledger import ViewLedgerUseCase
-from bookkeeper.infrastructure.persistence.csv_transaction_repository import (
-    CsvTransactionRepository,
+from bookkeeper.common.di import (
+    init_add_transaction_usecase,
+    init_list_journal_usecase,
+    init_view_ledger_usecase,
 )
-from bookkeeper.infrastructure.config.settings import settings
+from bookkeeper.domain.models.transaction import Transaction
 from bookkeeper.presentation.cli.formatters import format_journal, format_ledger
 
 
@@ -30,20 +27,13 @@ app = typer.Typer(
 )
 
 
-def _get_repository():
-    """リポジトリを取得する共通関数"""
-    settings.ensure_data_dir()
-    return CsvTransactionRepository(settings.TRANSACTIONS_CSV)
-
-
 @app.command()
 def add():
     """仕訳を追加"""
     print("=== 仕訳追加 ===")
     print()
 
-    repository = _get_repository()
-    use_case = AddTransactionUseCase(repository)
+    use_case = init_add_transaction_usecase()
 
     try:
         # 日付入力
@@ -104,8 +94,7 @@ def add():
 @app.command()
 def journal():
     """仕訳帳を表示"""
-    repository = _get_repository()
-    use_case = ListJournalUseCase(repository)
+    use_case = init_list_journal_usecase()
     transactions = use_case.execute()
     print(format_journal(transactions))
 
@@ -113,7 +102,6 @@ def journal():
 @app.command()
 def ledger(account_name: str = typer.Argument(..., help="勘定科目名")):
     """元帳を表示"""
-    repository = _get_repository()
-    use_case = ViewLedgerUseCase(repository)
+    use_case = init_view_ledger_usecase()
     entries = use_case.execute(account_name)
     print(format_ledger(account_name, entries))
