@@ -9,6 +9,7 @@ from datetime import date, datetime
 from decimal import Decimal, InvalidOperation
 
 import typer
+from pydantic import ValidationError
 
 from bookkeeper.common.di import (
     init_add_transaction_usecase,
@@ -83,7 +84,7 @@ def add():
         print()
         print("✓ 仕訳を追加しました")
 
-    except (ValueError, InvalidOperation) as e:
+    except (ValueError, InvalidOperation, ValidationError) as e:
         print(f"エラー: {e}")
         raise typer.Exit(code=1)
     except KeyboardInterrupt:
