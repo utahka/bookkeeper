@@ -7,6 +7,9 @@ CLI コマンド
 import sys
 from datetime import date, datetime
 from decimal import Decimal, InvalidOperation
+from typing import Optional
+
+import typer
 
 from bookkeeper.domain.models.transaction import Transaction
 from bookkeeper.application.use_cases.add_transaction import AddTransactionUseCase
@@ -19,121 +22,98 @@ from bookkeeper.infrastructure.config.settings import settings
 from bookkeeper.presentation.cli.formatters import format_journal, format_ledger
 
 
-class CLI:
-    """CLIアプリケーション"""
+# Typerアプリケーションの作成
+app = typer.Typer(
+    name="bookkeeper",
+    help="青色申告 会計ツール",
+    no_args_is_help=True,
+)
 
-    def __init__(self):
-        # リポジトリの初期化
-        settings.ensure_data_dir()
-        self.repository = CsvTransactionRepository(settings.TRANSACTIONS_CSV)
 
-        # ユースケースの初期化
-        self.add_transaction_use_case = AddTransactionUseCase(self.repository)
-        self.list_journal_use_case = ListJournalUseCase(self.repository)
-        self.view_ledger_use_case = ViewLedgerUseCase(self.repository)
+def _get_repository():
+    """リポジトリを取得する共通関数"""
+    settings.ensure_data_dir()
+    return CsvTransactionRepository(settings.TRANSACTIONS_CSV)
 
-    def run(self, args: list[str]):
-        """CLIを実行"""
-        if len(args) < 2:
-            self._print_usage()
-            return
 
-        command = args[1]
+@app.command()
+def add():
+    """仕訳を追加"""
+    print("=== 仕訳追加 ===")
+    print()
 
-        if command == "add":
-            self._add_command()
-        elif command == "journal":
-            self._journal_command()
-        elif command == "ledger":
-            if len(args) < 3:
-                print("エラー: 勘定科目名を指定してください")
-                print("使用例: uv run main.py ledger 普通預金")
-                return
-            account_name = args[2]
-            self._ledger_command(account_name)
+    repository = _get_repository()
+    use_case = AddTransactionUseCase(repository)
+
+    try:
+        # 日付入力
+        date_str = input("日付 (YYYY-MM-DD, 空欄で今日): ").strip()
+        if not date_str:
+            txn_date = date.today()
         else:
-            print(f"エラー: 不明なコマンド '{command}'")
-            self._print_usage()
+            txn_date = datetime.strptime(date_str, "%Y-%m-%d").date()
 
-    def _print_usage(self):
-        """使い方を表示"""
-        print("青色申告 会計ツール")
+        # 借方
+        debit_account = input("借方勘定科目: ").strip()
+        debit_amount_str = input("借方金額: ").strip()
+        debit_amount = Decimal(debit_amount_str)
+
+        # 貸方
+        credit_account = input("貸方勘定科目: ").strip()
+        credit_amount_str = input("貸方金額 (空欄で借方と同額): ").strip()
+        if not credit_amount_str:
+            credit_amount = debit_amount
+        else:
+            credit_amount = Decimal(credit_amount_str)
+
+        # 摘要
+        description = input("摘要: ").strip()
+
+        # 備考（任意）
+        note = input("備考 (任意): ").strip()
+
+        # 証憑パス（任意）
+        evidence_path = input("証憑パス (任意): ").strip()
+
+        # Transactionエンティティを作成（バリデーションが実行される）
+        transaction = Transaction(
+            date=txn_date,
+            debit_account=debit_account,
+            debit_amount=debit_amount,
+            credit_account=credit_account,
+            credit_amount=credit_amount,
+            description=description,
+            note=note,
+            evidence_path=evidence_path,
+        )
+
+        # 保存
+        use_case.execute(transaction)
+
         print()
-        print("使い方:")
-        print("  uv run main.py add              仕訳を追加")
-        print("  uv run main.py journal          仕訳帳を表示")
-        print("  uv run main.py ledger <科目>    元帳を表示")
-        print()
-        print("例:")
-        print("  uv run main.py ledger 普通預金")
-        print("  uv run main.py ledger 売掛金")
+        print("✓ 仕訳を追加しました")
 
-    def _add_command(self):
-        """仕訳追加コマンド"""
-        print("=== 仕訳追加 ===")
-        print()
+    except (ValueError, InvalidOperation) as e:
+        print(f"エラー: {e}")
+        raise typer.Exit(code=1)
+    except KeyboardInterrupt:
+        print("\n中断しました")
+        raise typer.Exit(code=0)
 
-        try:
-            # 日付入力
-            date_str = input("日付 (YYYY-MM-DD, 空欄で今日): ").strip()
-            if not date_str:
-                txn_date = date.today()
-            else:
-                txn_date = datetime.strptime(date_str, "%Y-%m-%d").date()
 
-            # 借方
-            debit_account = input("借方勘定科目: ").strip()
-            debit_amount_str = input("借方金額: ").strip()
-            debit_amount = Decimal(debit_amount_str)
+@app.command()
+def journal():
+    """仕訳帳を表示"""
+    repository = _get_repository()
+    use_case = ListJournalUseCase(repository)
+    transactions = use_case.execute()
+    print(format_journal(transactions))
 
-            # 貸方
-            credit_account = input("貸方勘定科目: ").strip()
-            credit_amount_str = input("貸方金額 (空欄で借方と同額): ").strip()
-            if not credit_amount_str:
-                credit_amount = debit_amount
-            else:
-                credit_amount = Decimal(credit_amount_str)
 
-            # 摘要
-            description = input("摘要: ").strip()
-
-            # 備考（任意）
-            note = input("備考 (任意): ").strip()
-
-            # 証憑パス（任意）
-            evidence_path = input("証憑パス (任意): ").strip()
-
-            # Transactionエンティティを作成（バリデーションが実行される）
-            transaction = Transaction(
-                date=txn_date,
-                debit_account=debit_account,
-                debit_amount=debit_amount,
-                credit_account=credit_account,
-                credit_amount=credit_amount,
-                description=description,
-                note=note,
-                evidence_path=evidence_path,
-            )
-
-            # 保存
-            self.add_transaction_use_case.execute(transaction)
-
-            print()
-            print("✓ 仕訳を追加しました")
-
-        except (ValueError, InvalidOperation) as e:
-            print(f"エラー: {e}")
-            sys.exit(1)
-        except KeyboardInterrupt:
-            print("\n中断しました")
-            sys.exit(0)
-
-    def _journal_command(self):
-        """仕訳帳表示コマンド"""
-        transactions = self.list_journal_use_case.execute()
-        print(format_journal(transactions))
-
-    def _ledger_command(self, account_name: str):
-        """元帳表示コマンド"""
-        entries = self.view_ledger_use_case.execute(account_name)
-        print(format_ledger(account_name, entries))
+@app.command()
+def ledger(account_name: str = typer.Argument(..., help="勘定科目名")):
+    """元帳を表示"""
+    repository = _get_repository()
+    use_case = ViewLedgerUseCase(repository)
+    entries = use_case.execute(account_name)
+    print(format_ledger(account_name, entries))
