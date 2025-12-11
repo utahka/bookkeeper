@@ -4,7 +4,6 @@ CLI コマンド
 ユーザーインターフェース
 """
 
-import sys
 from datetime import date, datetime
 from decimal import Decimal, InvalidOperation
 
@@ -16,7 +15,7 @@ from bookkeeper.common.di import (
     init_list_journal_usecase,
     init_view_ledger_usecase,
 )
-from bookkeeper.domain.models.transaction import Transaction
+from bookkeeper.domain.entity.transaction import Transaction
 from bookkeeper.presentation.cli.formatters import format_journal, format_ledger
 
 

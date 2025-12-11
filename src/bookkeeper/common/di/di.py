@@ -7,7 +7,7 @@
 from bookkeeper.application.usecase.add_transaction import AddTransactionUseCase
 from bookkeeper.application.usecase.list_journal import ListJournalUseCase
 from bookkeeper.application.usecase.view_ledger import ViewLedgerUseCase
-from bookkeeper.domain.repositories.transaction_repository import TransactionRepository
+from bookkeeper.domain.repository.transaction_repository import TransactionRepository
 from bookkeeper.infrastructure.config.settings import settings
 from bookkeeper.infrastructure.repository.csv_transaction_repository import (
     CsvTransactionRepository,

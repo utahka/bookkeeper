@@ -6,6 +6,7 @@ Transaction エンティティ
 from datetime import date
 from decimal import Decimal
 from typing import Annotated
+from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
@@ -15,6 +16,7 @@ class Transaction(BaseModel):
 
     model_config = ConfigDict(frozen=True)
 
+    id: UUID | None = None  # リポジトリが UUID を生成（新規作成時は None）
     date: date
     debit_account: Annotated[str, Field(min_length=1)]
     debit_amount: Decimal

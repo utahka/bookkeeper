@@ -7,11 +7,12 @@ Polarsを使って効率的にCSVで仕訳を永続化
 from pathlib import Path
 from typing import List
 from decimal import Decimal
+from uuid import UUID, uuid4
 
 import polars as pl
 
-from bookkeeper.domain.models.transaction import Transaction
-from bookkeeper.domain.repositories.transaction_repository import TransactionRepository
+from bookkeeper.domain.entity.transaction import Transaction
+from bookkeeper.domain.repository.transaction_repository import TransactionRepository
 
 
 class CsvTransactionRepository(TransactionRepository):
@@ -19,6 +20,7 @@ class CsvTransactionRepository(TransactionRepository):
 
     # スキーマ定義
     SCHEMA = {
+        "id": pl.String,  # UUID を文字列として保存
         "date": pl.Date,
         "debit_account": pl.String,
         "debit_amount": pl.String,  # Decimalとして扱うため文字列で保存
@@ -43,9 +45,13 @@ class CsvTransactionRepository(TransactionRepository):
 
     def add(self, transaction: Transaction) -> None:
         """仕訳を追加"""
+        # UUID を生成（transaction.id が None の場合）
+        transaction_id = transaction.id if transaction.id else uuid4()
+
         # 新しい行をDataFrameとして作成
         new_row = pl.DataFrame(
             {
+                "id": [str(transaction_id)],
                 "date": [transaction.date],
                 "debit_account": [transaction.debit_account],
                 "debit_amount": [str(transaction.debit_amount)],
@@ -105,6 +111,7 @@ class CsvTransactionRepository(TransactionRepository):
         for row in df.iter_rows(named=True):
             transactions.append(
                 Transaction(
+                    id=UUID(row["id"]) if row.get("id") else None,
                     date=row["date"],
                     debit_account=row["debit_account"],
                     debit_amount=Decimal(row["debit_amount"]),

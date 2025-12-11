@@ -6,8 +6,8 @@ ViewLedger ユースケース
 
 from typing import List
 
-from bookkeeper.domain.repositories.transaction_repository import TransactionRepository
-from bookkeeper.domain.services.ledger_service import LedgerService, LedgerEntry
+from bookkeeper.domain.repository.transaction_repository import TransactionRepository
+from bookkeeper.domain.service.ledger_service import LedgerService, LedgerEntry
 
 
 class ViewLedgerUseCase:

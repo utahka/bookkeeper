@@ -8,7 +8,7 @@ from typing import List
 from dataclasses import dataclass
 from decimal import Decimal
 
-from bookkeeper.domain.models.transaction import Transaction
+from bookkeeper.domain.entity.transaction import Transaction
 
 
 @dataclass
